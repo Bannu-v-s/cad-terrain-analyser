@@ -3,3 +3,5 @@ ezdxf
 numpy
 scipy
 plotly
+matplotlib
+pandas
