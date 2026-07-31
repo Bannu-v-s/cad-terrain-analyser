@@ -60,6 +60,29 @@ EQUATIONS = ["Compare all", "1 - Trapezoidal Rule", "2 - Average End Area",
              "3 - Shoelace Formula", "4 - Simpson's Rule", "5 - Spot Height Volume",
              "6 - Triangular Prism", "7 - Rectangular Prism", "8 - Prismoidal Formula"]
 
+EXPLANATIONS = {
+    "1": ("Estimates volume by slicing the area into strips, each with a straight-line top, and adding them up.",
+          "A = d·[(h₁+hₙ)/2 + h₂ + h₃ + … + hₙ₋₁]"),
+    "2": ("Volume between cross-sections: average each pair of neighbouring section areas, times the distance between them.",
+          "V = l·[(A₁+Aₙ)/2 + A₂ + … + Aₙ₋₁]"),
+    "3": ("Plan area of a polygon computed directly from its corner coordinates.",
+          "2A = (x₁y₂ + x₂y₃ + …) − (y₁x₂ + y₂x₃ + …)"),
+    "4": ("Like the Trapezoidal Rule but fits curved (parabolic) tops, so it's usually more accurate. Needs an odd number of points.",
+          "A = (d/3)·[h₁ + hₙ + 4(h₂+h₄+…) + 2(h₃+h₅+…)]"),
+    "5": ("Grid method: each grid-corner height is weighted by how many squares share it.",
+          "V = (A/4)·(Σh₁ + 2Σh₂ + 3Σh₃ + 4Σh₄)"),
+    "6": ("Volume of a 3-corner prism: average of the 3 corner heights times the base area.",
+          "V = (A/3)·(h₁ + h₂ + h₃)"),
+    "7": ("Volume of a 4-corner prism: average of the 4 corner heights times the base area.",
+          "V = A·(h₁ + h₂ + h₃ + h₄)/4"),
+    "8": ("Uses two end sections plus a real measured middle section — more accurate than average-end-area.",
+          "V = (l/3)·(A₁ + 4Aₘ + A₂)"),
+}
+
+
+def unit_for(kind):
+    return "m²" if kind == "plan area" else "m³"
+
 uploaded = st.file_uploader("Upload a DXF file", type=["dxf"])
 if uploaded is None:
     st.info("Upload a DXF file to begin.")
@@ -99,7 +122,7 @@ if method == "Draw on map (lasso)":
     with left:
         st.caption("Pick the lasso or box tool in the chart toolbar, then drag.")
         fig = go.Figure(go.Scattergl(x=xs, y=ys, mode="markers",
-            marker=dict(size=3, color=zs, colorscale="Viridis",
+            marker=dict(size=3, color=zs, colorscale="Viridis", reversescale=True,
                         colorbar=dict(title="elev"))))
         fig.update_layout(height=600, dragmode="lasso",
                           margin=dict(l=0, r=0, t=0, b=0),
@@ -127,7 +150,7 @@ elif method == "Click points on map":
             st.session_state.clicked_corners.pop()
 
         fig = go.Figure(go.Scattergl(x=xs, y=ys, mode="markers",
-            marker=dict(size=3, color=zs, colorscale="Viridis",
+            marker=dict(size=3, color=zs, colorscale="Viridis", reversescale=True,
                         colorbar=dict(title="elev"))))
 
         corners = st.session_state.clicked_corners
@@ -187,7 +210,7 @@ else:
                 sel = np.column_stack([xs[inside], ys[inside], zs[inside]])
 
         fig = go.Figure(go.Scattergl(x=xs, y=ys, mode="markers",
-            marker=dict(size=3, color=zs, colorscale="Viridis",
+            marker=dict(size=3, color=zs, colorscale="Viridis", reversescale=True,
                         colorbar=dict(title="elev"))))
         if poly_xy:
             px = [p[0] for p in poly_xy] + [poly_xy[0][0]]
@@ -273,8 +296,9 @@ if eq == "Compare all":
     for name in EQUATIONS[1:]:
         try:
             v, kind = compute(name)
+            unit = unit_for(kind)
             table.append({"Equation": name,
-                          "Result": f"{v:,.1f}" if v is not None else "n/a",
+                          "Result": f"{v:,.1f} {unit}" if v is not None else "n/a",
                           "Type": kind})
         except Exception as ex:
             table.append({"Equation": name, "Result": f"error: {ex}", "Type": "-"})
@@ -284,10 +308,33 @@ else:
     if v is None:
         st.error("Simpson's Rule needs an odd number of grid points.")
     else:
-        st.metric(eq, f"{v:,.1f}", help=kind)
+        # plan area of the selection (exact from polygon corners if we have them)
+        if poly_xy and len(poly_xy) >= 3:
+            plan_area = shoelace_area(poly_xy)
+        else:
+            hull = [(sel[i, 0], sel[i, 1]) for i in ConvexHull(sel[:, :2]).vertices]
+            plan_area = shoelace_area(hull)
+
+        if kind == "plan area":
+            # Shoelace itself is an area - just show the area
+            st.metric("Area", f"{v:,.1f} m²")
+        else:
+            # a volume - show Volume, Area, and average height H = V / A
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Volume", f"{v:,.1f} m³")
+            c2.metric("Area", f"{plan_area:,.1f} m²")
+            height = v / plan_area if plan_area else 0
+            c3.metric("Height (H = V / A)", f"{height:,.2f} m")
+
+        num = eq.split(" ")[0]
+        if num in EXPLANATIONS:
+            desc, formula = EXPLANATIONS[num]
+            with st.expander("ℹ️ About this equation"):
+                st.write(desc)
+                st.code(formula)
 
 st.subheader("Selected surface")
-s3 = go.Figure(go.Surface(x=gx, y=gy, z=GZ_display, colorscale="Viridis"))
+s3 = go.Figure(go.Surface(x=gx, y=gy, z=GZ_display, colorscale="Viridis", reversescale=True))
 s3.update_layout(height=500, margin=dict(l=0, r=0, t=0, b=0),
                  scene=dict(
                      xaxis=dict(title="E (Easting)", tickformat=",d", exponentformat="none"),
