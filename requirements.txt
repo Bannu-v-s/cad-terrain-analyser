@@ -1,5 +1,6 @@
-streamlit
-ezdxf
-numpy
-scipy
-plotly
+streamlit==1.59.0
+ezdxf==1.4.4
+numpy==2.5.1
+scipy==1.18.0
+plotly==6.8.0
+pandas==3.0.3
