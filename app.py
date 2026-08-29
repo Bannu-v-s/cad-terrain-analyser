@@ -4,12 +4,20 @@ from collections import defaultdict
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
-from matplotlib.path import Path
 from scipy.spatial import ConvexHull
 from calcs import (build_grid, spot_height_groups, volume_trapezoidal,
                    volume_simpson, average_end_area, prismoidal_volume,
                    shoelace_area, spot_height_volume, triangular_prism,
                    rectangular_prism)
+from scipy.spatial import Delaunay
+
+class Path:
+    """Minimal drop-in for matplotlib.path.Path — point-in-polygon only."""
+    def __init__(self, vertices):
+        self.tri = Delaunay(np.asarray(vertices, float))
+
+    def contains_points(self, points):
+        return self.tri.find_simplex(np.asarray(points, float)) >= 0
 
 st.set_page_config(page_title="CAD Terrain Analyser", layout="wide")
 st.title("CAD Terrain Analyser")
