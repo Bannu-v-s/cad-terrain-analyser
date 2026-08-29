@@ -241,34 +241,50 @@ st.write(f"**Selection:** {len(sel):,} points, "
          f"elevation {sel[:, 2].min():g} to {sel[:, 2].max():g}")
 
 if len(sel) < 10:
-    st.warning("Too few points selected - pick a bigger area.")
-    st.stop()
+        st.warning("Too few points selected - pick a bigger area.")
+        st.stop()
+
+    # Lasso mode gives us points but no boundary. Derive one from the
+    # selection's outer edge so masking and plan area use the same region.
+lasso_hull = False
+if poly_xy is None:
+        try:
+            hull_idx = ConvexHull(sel[:, :2]).vertices
+            poly_xy = [(float(sel[i, 0]), float(sel[i, 1])) for i in hull_idx]
+            lasso_hull = True
+        except Exception:
+            st.warning("Could not work out a boundary for this selection - "
+                       "the points may be in a straight line. Try a wider area.")
+            st.stop()
+
+if lasso_hull:
+        st.caption("Lasso mode uses the outer boundary of your selected points. "
+                   "For an exact shape, use click or coordinate mode.")
 
 gx, gy, GZ, dx, dy = build_grid(sel, n_grid)
 
-# mask grid cells that fall OUTSIDE the selected polygon
+    # mask grid cells that fall OUTSIDE the selected polygon
 if poly_xy and len(poly_xy) >= 3:
-    GXc, GYc = np.meshgrid(gx, gy)
-    inside_cell = Path(poly_xy).contains_points(
-        np.column_stack([GXc.ravel(), GYc.ravel()])).reshape(GXc.shape)
+        GXc, GYc = np.meshgrid(gx, gy)
+        inside_cell = Path(poly_xy).contains_points(
+            np.column_stack([GXc.ravel(), GYc.ravel()])).reshape(GXc.shape)
 else:
-    inside_cell = np.ones(GZ.shape, dtype=bool)   # no polygon -> keep all
+        inside_cell = np.ones(GZ.shape, dtype=bool)
 
 H = np.where(inside_cell, np.clip(GZ - datum, 0, None), 0.0)
-GZ_display = np.where(inside_cell, GZ, np.nan)     # nan = hidden in 3D
+GZ_display = np.where(inside_cell, GZ, np.nan)
 cell = dx * dy
 st.caption(f"Grid spacing d = {dx:,.2f} x {dy:,.2f}   (cell area {cell:,.1f})")
 
 
-def compute(name):
+def compute(name, poly_xy):
     if name.startswith("1"):
         v, _ = volume_trapezoidal(gx, gy, GZ, dx, dy, datum); return v, "volume"
     if name.startswith("2"):
         _, rows = volume_trapezoidal(gx, gy, GZ, dx, dy, datum)
         return average_end_area(rows, dy), "volume"
     if name.startswith("3"):
-        hull = [(sel[i, 0], sel[i, 1]) for i in ConvexHull(sel[:, :2]).vertices]
-        return shoelace_area(hull), "plan area"
+        return shoelace_area(poly_xy), "plan area"
     if name.startswith("4"):
         v, _ = volume_simpson(gx, gy, GZ, dx, dy, datum); return v, "volume"
     if name.startswith("5"):
@@ -295,7 +311,7 @@ if eq == "Compare all":
     table = []
     for name in EQUATIONS[1:]:
         try:
-            v, kind = compute(name)
+            v, kind = compute(name, poly_xy)
             unit = unit_for(kind)
             table.append({"Equation": name,
                           "Result": f"{v:,.1f} {unit}" if v is not None else "n/a",
@@ -304,16 +320,11 @@ if eq == "Compare all":
             table.append({"Equation": name, "Result": f"error: {ex}", "Type": "-"})
     st.table(table)
 else:
-    v, kind = compute(eq)
+    v, kind = compute(eq, poly_xy)
     if v is None:
         st.error("Simpson's Rule needs an odd number of grid points.")
     else:
-        # plan area of the selection (exact from polygon corners if we have them)
-        if poly_xy and len(poly_xy) >= 3:
-            plan_area = shoelace_area(poly_xy)
-        else:
-            hull = [(sel[i, 0], sel[i, 1]) for i in ConvexHull(sel[:, :2]).vertices]
-            plan_area = shoelace_area(hull)
+        plan_area = shoelace_area(poly_xy)
 
         if kind == "plan area":
             # Shoelace itself is an area - just show the area
