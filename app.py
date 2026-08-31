@@ -19,9 +19,14 @@ class Path:
     def contains_points(self, points):
         return self.tri.find_simplex(np.asarray(points, float)) >= 0
 
-st.set_page_config(page_title="CAD Terrain Analyser", layout="wide")
+with open("logo-dark.svg") as f:
+    svg = f.read()
+st.markdown(
+    f'<div style="width:150px;height:auto;overflow:hidden">'
+    f'<style>div svg{{width:100%;height:auto}}</style>{svg}</div>',
+    unsafe_allow_html=True)
 st.title("CAD Terrain Analyser")
-
+st.set_page_config(page_title="CAD Terrain Analyser — DUCLab", page_icon="favicon.png", layout="wide")
 
 @st.cache_data
 def read_dxf(file_bytes):
@@ -93,7 +98,7 @@ def unit_for(kind):
 
 uploaded = st.file_uploader("Upload a DXF file", type=["dxf"])
 if uploaded is None:
-    st.info("Upload a DXF file to begin.")
+    st.caption("Upload a DXF file to begin.")
     st.stop()
 
 polylines = read_dxf(uploaded.getvalue())
@@ -198,7 +203,7 @@ elif method == "Click points on map":
             if inside.sum() >= 4:
                 sel = np.column_stack([xs[inside], ys[inside], zs[inside]])
         else:
-            st.info("Click at least 3 corners to form a polygon.")
+            st.caption("Click at least 3 corners to form a polygon.")
 else:
     with left:
         st.caption("Enter each corner as Northing (vertical) and Easting (horizontal), "
@@ -240,7 +245,7 @@ with right:
     eq = st.selectbox("Equation", EQUATIONS)
     n_grid = st.slider("Grid resolution (n x n)", 11, 81, 41, step=2)
     if sel is None:
-        st.info("Select an area first (lasso, or type at least 3 corners).")
+        st.caption("Select an area first (lasso, or type at least 3 corners).")
         st.stop()
     datum = st.number_input("Datum (base level)", value=float(sel[:, 2].min()))
 
